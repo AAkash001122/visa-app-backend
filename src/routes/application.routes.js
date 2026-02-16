@@ -14,7 +14,7 @@ const router = express.Router();
 
 /* MULTER */
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "src/uploads"),
+  destination: (req, file, cb) => cb(null, "uploads"), // ✅ FIXED
   filename: (req, file, cb) =>
     cb(null, Date.now() + "-" + file.originalname),
 });
@@ -37,7 +37,7 @@ router.post(
 router.get("/", getApplications);
 router.get("/:id", getApplicationById);
 
-/* UPDATE ✅ */
+/* UPDATE */
 router.put(
   "/:id",
   upload.fields([
@@ -53,7 +53,7 @@ router.put(
 router.put("/:id/approve", approveApplication);
 router.put("/:id/reject", rejectApplication);
 
-/* DOWNLOAD */
+/* DOWNLOAD VISA */
 router.get("/:id/download-visa", downloadVisa);
 
 export default router;
