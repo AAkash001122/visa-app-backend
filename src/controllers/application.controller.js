@@ -1,140 +1,144 @@
-import Application from "../models/Application.model.js";
+import db from "../../db.js";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 
 /* CREATE */
-export const createApplication = async (req, res) => {
-  try {
-    const { name, email, passport, nationality } = req.body;
+export const createApplication = (req, res) => {
+  const {
+    name,
+    email,
+    phone,
+    nationality,
+    dob,
+    gender,
+    state,
+    city,
+    issuingCountry,
+    issueDate,
+    applyDate
+  } = req.body;
 
-    const app = new Application({
-      name,
-      email,
-      passport,
-      nationality,
-      passportFile: req.files?.passportFile?.[0]?.filename || null,
-      aadhaarFile: req.files?.aadhaarFile?.[0]?.filename || null,
-      panFile: req.files?.panFile?.[0]?.filename || null,
-      photoFile: req.files?.photoFile?.[0]?.filename || null,
-      status: "Pending",
-    });
+  const sql = `
+    INSERT INTO applications 
+    (name, email, phone, nationality, dob, gender, state, city, issuingCountry, issueDate, applyDate,
+     passportFile, aadhaarFile, panFile, photoFile, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')
+  `;
 
-    await app.save();
-    res.status(201).json(app);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+  db.query(sql, [
+    name,
+    email,
+    phone,
+    nationality,
+    dob,
+    gender,
+    state,
+    city,
+    issuingCountry,
+    issueDate,
+    applyDate,
+    req.files?.passportFile?.[0]?.filename || null,
+    req.files?.aadhaarFile?.[0]?.filename || null,
+    req.files?.panFile?.[0]?.filename || null,
+    req.files?.photoFile?.[0]?.filename || null
+  ], (err, result) => {
+    if (err) return res.status(500).json(err);
+    res.json({ message: "Application Submitted", id: result.insertId });
+  });
 };
 
 /* GET ALL */
-export const getApplications = async (req, res) => {
-  const apps = await Application.find();
-  res.json(apps);
+export const getApplications = (req, res) => {
+  db.query("SELECT * FROM applications", (err, results) => {
+    if (err) return res.status(500).json(err);
+    res.json(results);
+  });
 };
 
 /* GET ONE */
-export const getApplicationById = async (req, res) => {
-  const app = await Application.findById(req.params.id);
-  res.json(app);
+export const getApplicationById = (req, res) => {
+  db.query("SELECT * FROM applications WHERE id = ?", [req.params.id], (err, results) => {
+    if (err) return res.status(500).json(err);
+    res.json(results[0]);
+  });
 };
 
-/* UPDATE (🔥 THIS FIXES EDIT ISSUE 🔥) */
-export const updateApplication = async (req, res) => {
-  try {
-    const updateData = {
-      name: req.body.name,
-      email: req.body.email,
-      passport: req.body.passport,
-      nationality: req.body.nationality,
-    };
+/* UPDATE */
+export const updateApplication = (req, res) => {
+  const updateData = { ...req.body };
 
-    if (req.files?.passportFile)
-      updateData.passportFile = req.files.passportFile[0].filename;
+  if (req.files?.passportFile)
+    updateData.passportFile = req.files.passportFile[0].filename;
+  if (req.files?.aadhaarFile)
+    updateData.aadhaarFile = req.files.aadhaarFile[0].filename;
+  if (req.files?.panFile)
+    updateData.panFile = req.files.panFile[0].filename;
+  if (req.files?.photoFile)
+    updateData.photoFile = req.files.photoFile[0].filename;
 
-    if (req.files?.aadhaarFile)
-      updateData.aadhaarFile = req.files.aadhaarFile[0].filename;
-
-    if (req.files?.panFile)
-      updateData.panFile = req.files.panFile[0].filename;
-
-    if (req.files?.photoFile)
-      updateData.photoFile = req.files.photoFile[0].filename;
-
-    const updated = await Application.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true }
-    );
-
-    res.json(updated);
-  } catch (err) {
-    res.status(500).json({ message: "Update failed" });
-  }
+  db.query("UPDATE applications SET ? WHERE id = ?", 
+    [updateData, req.params.id],
+    (err) => {
+      if (err) return res.status(500).json(err);
+      res.json({ message: "Updated Successfully" });
+    });
 };
 
 /* APPROVE */
-export const approveApplication = async (req, res) => {
-  const app = await Application.findByIdAndUpdate(
-    req.params.id,
-    { status: "Approved" },
-    { new: true }
-  );
-  res.json(app);
+export const approveApplication = (req, res) => {
+  db.query("UPDATE applications SET status='Approved' WHERE id=?",
+    [req.params.id],
+    (err) => {
+      if (err) return res.status(500).json(err);
+      res.json({ message: "Approved" });
+    });
 };
 
 /* REJECT */
-export const rejectApplication = async (req, res) => {
-  const app = await Application.findByIdAndUpdate(
-    req.params.id,
-    { status: "Rejected" },
-    { new: true }
-  );
-  res.json(app);
+export const rejectApplication = (req, res) => {
+  db.query("UPDATE applications SET status='Rejected' WHERE id=?",
+    [req.params.id],
+    (err) => {
+      if (err) return res.status(500).json(err);
+      res.json({ message: "Rejected" });
+    });
 };
 
 /* DOWNLOAD VISA */
-export const downloadVisa = async (req, res) => {
-  const app = await Application.findById(req.params.id);
+export const downloadVisa = (req, res) => {
+  db.query("SELECT * FROM applications WHERE id=?", 
+    [req.params.id],
+    async (err, results) => {
+      if (err || results.length === 0)
+        return res.status(404).json({ message: "Not found" });
 
-  if (!app || app.status !== "Approved") {
-    return res.status(403).json({ message: "Not approved" });
-  }
+      const app = results[0];
 
-  const doc = new PDFDocument({ size: [350, 220], margin: 10 });
+      if (app.status !== "Approved")
+        return res.status(403).json({ message: "Not approved" });
 
-  res.setHeader(
-    "Content-Disposition",
-    `attachment; filename=VISA-${app.passport}.pdf`
-  );
-  res.setHeader("Content-Type", "application/pdf");
+      const doc = new PDFDocument({ size: [350, 220], margin: 10 });
+      res.setHeader("Content-Disposition", `attachment; filename=VISA-${app.phone}.pdf`);
+      res.setHeader("Content-Type", "application/pdf");
 
-  doc.pipe(res);
+      doc.pipe(res);
 
-  doc.rect(0, 0, 350, 30).fill("#0b5394");
-  doc.fillColor("white").fontSize(10)
-    .text("GOVERNMENT OF INDIA - ELECTRONIC VISA", 10, 10);
+      doc.rect(0, 0, 350, 30).fill("#0b5394");
+      doc.fillColor("white").fontSize(10)
+         .text("GOVERNMENT OF INDIA - ELECTRONIC VISA", 10, 10);
 
-  doc.fillColor("black").fontSize(8);
+      doc.fillColor("black").fontSize(8);
+      doc.text(`Name: ${app.name}`, 10, 45);
+      doc.text(`Phone: ${app.phone}`, 10, 65);
+      doc.text(`Nationality: ${app.nationality}`, 10, 85);
+      doc.text(`Email: ${app.email}`, 10, 105);
 
-  doc.text(`Name: ${app.name}`, 10, 45);
-  doc.text(`Passport: ${app.passport}`, 10, 65);
-  doc.text(`Nationality: ${app.nationality}`, 10, 85);
-  doc.text(`Email: ${app.email}`, 10, 105);
+      const qr = await QRCode.toDataURL(`${app.name} | ${app.phone} | APPROVED`);
+      doc.image(qr, 230, 55, { width: 70 });
 
-  if (app.photoFile) {
-    doc.image(`src/uploads/${app.photoFile}`, 130, 45, {
-      width: 70,
-      height: 90,
+      doc.fillColor("green").fontSize(9)
+         .text("STATUS: APPROVED", 10, 195);
+
+      doc.end();
     });
-  }
-
-  const qr = await QRCode.toDataURL(
-    `${app.name} | ${app.passport} | APPROVED`
-  );
-  doc.image(qr, 230, 55, { width: 70 });
-
-  doc.fillColor("green").fontSize(9)
-    .text("STATUS: APPROVED", 10, 195);
-
-  doc.end();
 };
